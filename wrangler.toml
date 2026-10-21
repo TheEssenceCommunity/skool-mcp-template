@@ -1,0 +1,32 @@
+# Your Worker's name. It becomes part of the URL: https://<name>.<your-subdomain>.workers.dev
+name = "skool-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Your community: the part of its URL after skool.com/ (e.g. skool.com/my-community-1234 -> "my-community-1234").
+SKOOL_DEFAULT_SLUG = "REPLACE_WITH_YOUR_COMMUNITY_SLUG"
+# Your community's internal id (32 hex characters). The README shows how to look it up.
+SKOOL_DEFAULT_GROUP_ID = "REPLACE_WITH_YOUR_GROUP_ID"
+# The Skool accounts the server can act as, comma-separated, each with an optional description after a colon.
+# The FIRST one must be an admin of the community: reads default to it, and the health check, analytics and the
+# nightly course-progress walk run as it. Each name needs a secret SKOOL_TOKEN_<NAME>, e.g. SKOOL_TOKEN_MAIN.
+# Example with a second account: "main:My admin account, cohost:My co-host's account"
+SKOOL_PROFILES = "main:The community admin account"
+
+# ONE cron trigger (the free plan allows 5 per account): every 3 minutes, 06:00–08:57 UTC.
+# The 08:00 run is the daily health check (Telegram alert when TELEGRAM_* secrets are set); every other
+# run is a step of the nightly course-progress walk, which exits at once when the night's walk is done.
+# See scheduled() in src/index.ts. Any new schedule must keep an 08:00 run.
+[triggers]
+crons = ["*/3 6-8 * * *"]
+
+# Nightly course-progress results (src/progress.ts). Free plan: 1,000 writes / 100,000 reads a day; this uses ~3–26 a night.
+# Create it with: npx wrangler kv namespace create PROGRESS   — then paste the id it prints below.
+[[kv_namespaces]]
+binding = "PROGRESS"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+[observability]
+enabled = true

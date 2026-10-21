@@ -1,0 +1,5 @@
+{
+  "MCP_BASE": "https://skool-mcp.YOUR-SUBDOMAIN.workers.dev",
+  "MCP_PATH_SECRET": "the same value you set with: wrangler secret put MCP_PATH_SECRET",
+  "MCP_ADMIN_KEY": "the same value you set with: wrangler secret put MCP_ADMIN_KEY"
+}
