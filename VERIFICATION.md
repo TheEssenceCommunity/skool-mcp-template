@@ -16,7 +16,7 @@ Copy this for each entry:
 
 ```
 ### YYYY-MM-DD: <what changed or was tested>
-- Tested: <tools / checks exercised, and how: Claude chat, smoke script, health check>
+- Tested: <tools / checks exercised, and how: AI app chat, smoke script, health check>
 - Result: <pass / fail, with the numbers that prove it, e.g. "health check 26/26 ok">
 - Not tested: <anything left unproven>
 ```

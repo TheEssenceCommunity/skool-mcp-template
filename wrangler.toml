@@ -14,6 +14,10 @@ SKOOL_DEFAULT_GROUP_ID = "REPLACE_WITH_YOUR_GROUP_ID"
 # nightly course-progress walk run as it. Each name needs a secret SKOOL_TOKEN_<NAME>, e.g. SKOOL_TOKEN_MAIN.
 # Example with a second account: "main:My admin account, cohost:My co-host's account"
 SKOOL_PROFILES = "main:The community admin account"
+# Which AI services may call the server (on top of the secret URL). Leave it commented out for Claude: by default only
+# Anthropic's servers get in. For another agent, set your provider's published IPv4 ranges (comma-separated CIDRs) to
+# lock it to that provider, or "any" if the agent calls from changing addresses or its provider publishes no ranges.
+# MCP_ALLOWED_IPS = "any"
 
 # ONE cron trigger (the free plan allows 5 per account): every 3 minutes, 06:00–08:57 UTC.
 # The 08:00 run is the daily health check (Telegram alert when TELEGRAM_* secrets are set); every other

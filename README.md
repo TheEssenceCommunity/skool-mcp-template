@@ -1,10 +1,13 @@
-# Skool MCP: give Claude your Skool community
+# Skool MCP: connect any AI agent to your Skool community
 
-A self-hosted [MCP](https://modelcontextprotocol.io) server that lets Claude read and write in your Skool community:
+A self-hosted [MCP](https://modelcontextprotocol.io) server that lets your AI agent read and write in your Skool community:
 the feed, comments, likes, polls, GIFs, members and join requests, DMs, the calendar, the classroom (including building
 courses and reading video transcripts), notifications, and Skool's full admin analytics. It runs on Cloudflare's free
-plan, so it keeps working with your computer off, and the same connector works in Claude on the web, desktop, phone
-and Claude Code.
+plan, so it keeps working with your computer off.
+
+It works with any agent or app that supports MCP. **Claude is the default**: the setup below connects Claude, and the
+same connector then works in Claude on the web, desktop, phone and Claude Code. For another agent (ChatGPT, Gemini,
+Cursor, a local agent, ...), follow the same steps and then step 11b.
 
 It also checks itself every morning and sends you a Telegram message if anything breaks or a login is about to expire.
 
@@ -20,7 +23,8 @@ You are setting this up for a person who may not be technical. Work through the 
 
 - **You do the technical work.** Run every command yourself. Ask the person only for the things that need their
   browser or their accounts: logging in to Cloudflare, copying their Skool login cookie, creating a Telegram bot, and
-  adding the connector in Claude.
+  adding the connector in their AI app.
+- **Ask which AI app they'll use** before step 11. Claude is the default; anything else goes through step 11b.
 - **Never commit secrets.** Tokens and keys go into Cloudflare with `wrangler secret put`, and locally only into
   `.mcp-local.json`, which is gitignored. Nothing secret ever goes into `wrangler.toml` or a commit.
 - **Never post, comment, like or DM in Skool during setup** without the person's explicit yes. Every test in the
@@ -28,8 +32,9 @@ You are setting this up for a person who may not be technical. Work through the 
 - **Keep a log.** Note what you verified, and when, in `VERIFICATION.md`.
 - **Check your work.** Each step says how to confirm it worked. Don't move on until it has.
 
-How it is secured: the server answers only at a secret URL (a secret path plus a secret key), and only to requests
-coming from Anthropic's servers. The Skool login cookie lives encrypted in Cloudflare, never in the repo.
+How it is secured: the server answers only at a secret URL (a secret path plus a secret key). On top of that, it
+accepts calls only from the AI provider's own servers: Anthropic's by default, set by `MCP_ALLOWED_IPS` (step 11b). The
+Skool login cookie lives encrypted in Cloudflare, never in the repo.
 
 ---
 
@@ -39,7 +44,7 @@ coming from Anthropic's servers. The Skool login cookie lives encrypted in Cloud
 - **A Cloudflare account.** Free: <https://dash.cloudflare.com/sign-up>.
 - **A Skool account that is an admin of your community.** Member-level accounts work too, but analytics, join
   requests, categories and course progress need admin.
-- **Claude** with custom connectors available (Settings → Connectors).
+- **An AI app that supports MCP connectors.** Claude (Settings → Connectors) is the default and the best tested.
 - **Optional but recommended: Telegram**, for the "something broke" alerts.
 
 Time: about 30 minutes.
@@ -197,7 +202,7 @@ sends one Telegram message when something fails or the cookie is about to expire
    It should print `{"telegramTestSent":true}`, and the message should arrive.
 
 When an alert comes in later, the fix is usually one of two things. If it says the token is expiring or `[auth]`,
-repeat step 8 with a fresh cookie. Anything else means Skool changed something: paste the alert into a Claude Code
+repeat step 8 with a fresh cookie. Anything else means Skool changed something: paste the alert into a coding agent (Claude Code or similar)
 session in this folder and say "fix this" (the fix path is in [NOTES.md](NOTES.md) → Maintenance).
 
 ### Step 10: Run the first health check
@@ -217,7 +222,7 @@ node -e 'const c=require("./.mcp-local.json");fetch(c.MCP_BASE+"/healthcheck",{h
 Every line should say `ok`. Checks that don't apply (for example the classroom, if the community has no courses) say
 `ok (skipped: ...)`.
 
-### Step 11: Add it to Claude
+### Step 11a: Connect Claude (the default)
 
 The person does this in Claude (on the web it is <https://claude.ai> → Settings → Connectors):
 
@@ -228,38 +233,68 @@ The person does this in Claude (on the web it is <https://claude.ai> → Setting
 
 Add it in Claude's Connectors settings, **not** with `claude mcp add`. The server only accepts calls that come from
 Anthropic's servers. A connector added in Claude's settings follows the person's account into Claude Code, but one
-added locally with `claude mcp add` calls from their own computer, and the server will refuse it.
+added locally with `claude mcp add` calls from their own computer, and the server will refuse it (unless callers are
+opened up as in step 11b).
 
 Why the key goes in the URL: the connector form on Claude web and mobile has no field for custom headers, so a URL is
 the only thing every Claude app can carry. If the key were required as a header, Claude would show *"Couldn't register
 with Skool's sign-in service"*. That error means the key is missing, not that anything is wrong with OAuth.
 
+### Step 11b: Connect any other agent
+
+The server speaks standard MCP over HTTP (Streamable HTTP, no OAuth), so any agent or app that can add a remote MCP
+server by URL can use it. Out of the box it only lets Anthropic's servers in, so first choose who else may call:
+
+- **Lock it to your provider (recommended when possible).** If your AI provider publishes the IPv4 ranges its servers
+  connect from, list them. This gives the same protection the default gives Claude: a leaked URL is useless to anyone
+  calling from elsewhere. Look the ranges up in the provider's own documentation; don't guess them.
+  `MCP_ALLOWED_IPS = "203.0.113.0/24, 198.51.100.0/22"`
+- **Allow any caller.** For agents that call from the person's own computer (local agents, `claude mcp add`, editor
+  plugins), whose home address changes, and for providers that publish no ranges or call over IPv6.
+  `MCP_ALLOWED_IPS = "any"`. The secret URL is then the only lock: treat it like a password, and rotate it if it leaks
+  (see **Looking after it**).
+- **Both Claude and another provider:** include Anthropic's range in the list: `"160.79.104.0/21, <their ranges>"`.
+
+Then:
+
+1. Uncomment `MCP_ALLOWED_IPS` in `wrangler.toml`, set it, and run `npx wrangler deploy`.
+2. In the agent, add a remote MCP server with the connector URL from step 7. If it asks for a transport, choose
+   Streamable HTTP (or plain "HTTP"). Authentication: none. If it only supports headers, use the URL without the last
+   segment and send the key as the `x-api-key` header.
+3. Ask the agent to call `skool_whoami`. It should list the person's communities.
+4. Set write tools to ask for approval, if the app allows it, and point the agent at `skool_usage_guide` before its
+   first real task. The rules about confirming every write are written into the tools, so they travel with any agent.
+
+Only Claude has been tested end to end. The server uses a recent version of the MCP standard; if an app fails to
+connect while `skool_whoami` works from another, the app probably doesn't support that version yet. Note the result in
+`VERIFICATION.md` either way.
+
 ### Step 12: Start your verification log
 
-Open `VERIFICATION.md` and record what you tested and when: the health check result, `skool_whoami` in Claude, and
+Open `VERIFICATION.md` and record what you tested and when: the health check result, `skool_whoami` from your AI app, and
 anything else you try. That log is how future sessions (yours or an agent's) know what is proven and what is assumed.
 
-Done. A good first real request in Claude: *"What happened in my Skool community this week?"*
+Done. A good first real request: *"What happened in my Skool community this week?"*
 
 ---
 
 ## Using it
 
-- In any chat, ask Claude to run **`skool_usage_guide`** before doing anything unusual. It covers every capability
+- In any chat, ask the agent to run **`skool_usage_guide`** before doing anything unusual. It covers every capability
   and the traps (for example, a comment with no text is almost always a GIF, not an error).
-- Claude will show you the exact text and ask before any post, comment, like, poll or DM. Writes can't really be
+- The agent is instructed to show you the exact text and ask before any post, comment, like, poll or DM. Writes can't really be
   undone: deleting a post does not take back the notification Skool already sent, and DMs can't be deleted at all.
 - For the complete tool list and how each one works, see [NOTES.md](NOTES.md).
 
 ## Adding another Skool account
 
-For example, so Claude can also post as a co-host:
+For example, so your agent can also post as a co-host:
 
-1. In `wrangler.toml`, list both, admin first. A short description after the colon tells Claude who each one is:
+1. In `wrangler.toml`, list both, admin first. A short description after the colon tells the agent who each one is:
    `SKOOL_PROFILES = "main:My admin account, cohost:My co-host's account"`
 2. Store the second account's cookie (copied the same way as in step 8, while logged in as that account):
    `npx wrangler secret put SKOOL_TOKEN_COHOST`. The secret name is `SKOOL_TOKEN_` plus the name in capitals.
-3. `npx wrangler deploy`. In Claude, turn the connector off and on again so it picks up the new account.
+3. `npx wrangler deploy`. In your AI app, turn the connector off and on again so it picks up the new account.
 
 Reads use the first account unless told otherwise; writes always ask which account to use. The daily health check
 covers every account that has a cookie stored. With three accounts it uses most of the free plan's per-run request
@@ -283,9 +318,9 @@ the health check (step 10) and add a line to `VERIFICATION.md`.
 
 ## Test from your machine (optional)
 
-The test scripts in `scripts/` talk to your deployed server the same way Claude does, using `.mcp-local.json`. The
-server refuses them by default, because they don't come from Anthropic, so open it up while testing and close it
-straight after:
+The test scripts in `scripts/` talk to your deployed server the same way an agent does, using `.mcp-local.json`. With
+the default lock the server refuses them, because they don't come from Anthropic (with `MCP_ALLOWED_IPS = "any"` they
+just work). So open it up while testing and close it straight after:
 
 ```bash
 echo 1 | npx wrangler secret put MCP_ALLOW_ANY_IP
@@ -317,23 +352,24 @@ errors.
 - **Login expiry**: about a year after the cookie was copied. The alert arrives 30 days ahead; repeat step 8. No
   redeploy needed.
 - **Changing the secret URL** (if it leaked): put new values for `MCP_PATH_SECRET` and/or `MCP_ADMIN_KEY` (step 7),
-  then update the connector URL in Claude. Old URLs stop working immediately.
+  then update the connector URL in your AI app. Old URLs stop working immediately.
 - **Something broke**: see [NOTES.md](NOTES.md) → Maintenance.
-- **A new tool doesn't show up in Claude**: the connector's tool list is cached. Turn the connector off and on, or
-  remove and re-add it.
+- **A new tool doesn't show up**: AI apps cache the connector's tool list. Turn the connector off and on, or remove
+  and re-add it.
 
 ## Costs and limits
 
 Everything here fits Cloudflare's free plan: one Worker, one cron trigger, and a KV store using a few writes a night.
 The main limit is 50 outgoing requests per call, so a few tools page their results (long video transcripts come in
-roughly 22-minute pieces in chat; from Claude Code, the usage guide has a one-shot shortcut).
+roughly 22-minute pieces in chat; an agent that can run shell commands, such as Claude Code, can use the usage
+guide's one-shot shortcut).
 
 ## Files
 
 | | |
 |---|---|
 | `src/` | The server. `skool.ts` holds every Skool endpoint, `tools.ts` the tools and the usage guide, `healthcheck.ts` the daily check |
-| `wrangler.toml` | Your community and accounts. The only file you edit |
+| `wrangler.toml` | Your community, accounts and allowed callers. The only file you edit |
 | `scripts/` | Test scripts, the group-id finder, and the endpoint inventory refresher |
 | `NOTES.md` | How everything works and what Skool's traps are. Read before changing code |
 | `SKOOL-ENDPOINTS.md` | Every endpoint Skool's own website calls, so "can Skool do X?" is a lookup |
