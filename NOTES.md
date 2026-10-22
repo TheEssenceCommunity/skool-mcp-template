@@ -10,11 +10,12 @@ Dates are when a behaviour was verified against live Skool. Skool changes withou
 ## Architecture
 
 ```
-Claude (web / desktop / phone)
+Any MCP client — Claude by default (web / desktop / phone), or another agent
    │  POST https://skool-mcp.<subdomain>.workers.dev/mcp/<MCP_PATH_SECRET>/<MCP_ADMIN_KEY>   (MCP 2026-07-28, stateless)
    ▼
 Cloudflare Worker  src/index.ts     gate 1: exact secret path   gate 2: MCP_ADMIN_KEY (URL or header)
-   │                                gate 3: caller IP ∈ Anthropic egress 160.79.104.0/21 (all three required)
+   │                                gate 3: caller IP ∈ MCP_ALLOWED_IPS (default: Anthropic egress 160.79.104.0/21;
+   │                                        another provider's IPv4 ranges, or "any") — all three required
    ├─ src/tools.ts      MCP tools (zod schemas) → pick profile → SkoolClient
    ├─ src/analytics.ts  skool_analytics: views, member-record counting, subrequest budget
    ├─ src/skool.ts      all Skool endpoint literals + auth headers + error classification
@@ -579,7 +580,9 @@ built. Automated outbound DMs to real members is a community-trust decision, not
 **Known limitations.**
 - Member approval: `skool_approve_member` has approved real join requests. Declining is deliberately not exposed as a tool: it is a rejection of a real person
   and belongs in the user's hands, in Skool. `SkoolClient.setMemberRole` still accepts the role if wanted.
-- Security is a secret URL (path secret + admin key) and Anthropic's IP range, not OAuth. Fine while only you and your team use it.
+- Security is a secret URL (path secret + admin key) plus a caller-IP lock (`MCP_ALLOWED_IPS`: Anthropic's range by
+  default), not OAuth. With `MCP_ALLOWED_IPS = "any"` the secret URL is the only lock. Fine while only you and your team
+  use it. The IP lock is IPv4 only: a provider that calls from IPv6 needs "any".
 - Unofficial. Uses Skool's internal API via a session cookie; use with your own accounts, at human pace.
 
 ## Lessons from the original build

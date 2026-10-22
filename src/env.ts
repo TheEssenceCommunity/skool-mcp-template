@@ -13,7 +13,13 @@ export interface Env {
   MCP_PATH_SECRET?: string;
   /** Required on every MCP request as `x-api-key` (Claude connector) or `x-mcp-key` (local scripts). */
   MCP_ADMIN_KEY?: string;
-  /** "1" lets requests from outside Anthropic's IP range in (they still need the key). For local testing only. */
+  /**
+   * Which callers may use the MCP endpoint, besides holding the key: comma-separated IPv4 CIDRs, or "any".
+   * Unset = Anthropic's egress range only (Claude). Set your own AI provider's published ranges to lock it to that
+   * provider, or "any" for agents that call from changing addresses (local agents, providers that publish no ranges).
+   */
+  MCP_ALLOWED_IPS?: string;
+  /** "1" lets requests from outside MCP_ALLOWED_IPS in (they still need the key). A temporary switch for local testing. */
   MCP_ALLOW_ANY_IP?: string;
   /** Optional: daily health-check alerts go to this Telegram chat. */
   TELEGRAM_BOT_TOKEN?: string;

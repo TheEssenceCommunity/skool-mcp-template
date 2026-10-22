@@ -2,8 +2,9 @@
  * skool-mcp — stateless MCP server (spec 2026-07-28) on Cloudflare Workers.
  * Endpoint: POST https://<worker>/mcp/<MCP_PATH_SECRET>/<MCP_ADMIN_KEY>
  * Gates (all required): (1) exact secret path, (2) MCP_ADMIN_KEY, presented as the trailing path segment, the `k`
- *        query param, or the `x-api-key` / `x-mcp-key` header, (3) caller IP inside Anthropic's egress range
- *        160.79.104.0/21. Fails closed.
+ *        query param, or the `x-api-key` / `x-mcp-key` header, (3) caller IP inside MCP_ALLOWED_IPS — by default
+ *        Anthropic's egress range 160.79.104.0/21, so only Claude can call; another provider's IPv4 ranges, or "any"
+ *        to accept every caller (then gates 1–2 are the only lock). Fails closed.
  *        The key is accepted from the URL and not only from a header because Claude's web and mobile connector
  *        settings carry a URL and nothing else — they have no custom-header field, so a header-only gate is
  *        unsatisfiable there and Claude falls back to an OAuth registration this server does not implement.
@@ -15,7 +16,27 @@ import { buildServer } from "./tools";
 import { runHealthcheck, notify } from "./healthcheck";
 import { progressStep, progressStatus } from "./progress";
 
-const ANTHROPIC_CIDR = { base: ipv4ToInt("160.79.104.0")!, bits: 21 };
+/** Anthropic's published egress range: who may call when MCP_ALLOWED_IPS is not set. */
+const DEFAULT_ALLOWED_IPS = "160.79.104.0/21";
+
+type Cidr = { base: number; bits: number };
+
+/** MCP_ALLOWED_IPS -> "any", or the IPv4 CIDRs it lists (comma-separated). null when any entry is malformed. */
+function parseAllowedIps(spec: string): "any" | Cidr[] | null {
+  if (spec.trim().toLowerCase() === "any") return "any";
+  const out: Cidr[] = [];
+  for (const raw of spec.split(",")) {
+    const entry = raw.trim();
+    if (!entry) continue;
+    const [ip, bitsRaw = "32"] = entry.split("/");
+    const n = ipv4ToInt(ip);
+    const bits = Number(bitsRaw);
+    if (n === null || !/^\d{1,2}$/.test(bitsRaw) || bits > 32) return null;
+    const size = 2 ** (32 - bits);
+    out.push({ base: Math.floor(n / size) * size, bits });
+  }
+  return out.length ? out : null;
+}
 
 function ipv4ToInt(ip: string): number | null {
   const parts = ip.trim().split(".");
@@ -30,7 +51,7 @@ function ipv4ToInt(ip: string): number | null {
   return n;
 }
 
-function inCidr(ip: string, cidr: { base: number; bits: number }): boolean {
+function inCidr(ip: string, cidr: Cidr): boolean {
   const n = ipv4ToInt(ip);
   if (n === null) return false; // IPv6 or garbage: fail closed
   const size = 2 ** (32 - cidr.bits);
@@ -104,9 +125,12 @@ export default {
     ];
     const adminKey = env.MCP_ADMIN_KEY;
     const keyOk = !!adminKey && offered.some((candidate) => !!candidate && timingSafeEqual(candidate, adminKey));
-    // Both locks: the key must be present AND (the caller is Anthropic OR MCP_ALLOW_ANY_IP is set for local testing).
+    // Both locks: the key must be present AND (the caller is in MCP_ALLOWED_IPS OR MCP_ALLOW_ANY_IP is set for local testing).
     if (!keyOk) return new Response("forbidden", { status: 403 });
-    if (!inCidr(ip, ANTHROPIC_CIDR) && env.MCP_ALLOW_ANY_IP !== "1") return new Response("forbidden", { status: 403 });
+    const allowed = parseAllowedIps(env.MCP_ALLOWED_IPS ?? DEFAULT_ALLOWED_IPS);
+    // Past the key check, so naming the setting reveals nothing to a stranger.
+    if (allowed === null) return new Response("MCP_ALLOWED_IPS is malformed: use \"any\" or comma-separated IPv4 CIDRs like 160.79.104.0/21.", { status: 500 });
+    if (allowed !== "any" && !allowed.some((c) => inCidr(ip, c)) && env.MCP_ALLOW_ANY_IP !== "1") return new Response("forbidden", { status: 403 });
 
     // The handler matches `route` against the pathname exactly, so hand it the canonical URL with the key stripped.
     const canonical = new URL(request.url);
