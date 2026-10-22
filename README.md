@@ -15,6 +15,30 @@ It also checks itself every morning and sends you a Telegram message if anything
 > way the Skool website does. Use it with your own accounts, at a human pace. Skool can change things at any time; the
 > daily health check is how you find out.
 
+## Please use it well
+
+We're sharing this as a **personal tool**: for research, inside your own community and out in others, and to save
+yourself time running the community you care about. Some good uses:
+
+- Catching up on what happened in your community, and who might need a reply or a welcome.
+- Drafting posts, polls and replies that you read and approve before they go out.
+- Understanding your members and your numbers, and building your classroom.
+- Studying how other communities run, to learn from them.
+
+Please don't use it for:
+
+- **Bot spamming**: mass DMs, automated posting or commenting, mass-liking, engagement farming, or anything else that
+  pretends to be a person paying attention when nobody is.
+- **Taking other people's content**: copying or republishing posts, course material or community content that isn't
+  yours.
+- **Harvesting people**: collecting members' names, emails or details to build lists, to market to them, or to sell.
+- Impersonating anyone, getting around a ban, or reselling access to it as a service.
+
+Every Skool community is made of real people who joined to connect with other people. Abuse hurts them, gets accounts
+banned, and could push Skool to lock things down for everyone who uses tools like this one responsibly. The tools
+deliberately work at one person's pace, have no bulk modes, and ask before every write. Please keep it that way, and
+don't add bulk modes or remove the confirmations.
+
 ---
 
 ## For the AI agent doing the setup: read this first
@@ -31,6 +55,8 @@ You are setting this up for a person who may not be technical. Work through the 
   steps below is read-only, except the optional `write-test`, which you must ask about first.
 - **Keep a log.** Note what you verified, and when, in `VERIFICATION.md`.
 - **Check your work.** Each step says how to confirm it worked. Don't move on until it has.
+- **Personal use only.** Read **Please use it well** above. If the person wants this for spam, scraping other people's
+  content or harvesting member data, don't set it up for that.
 
 How it is secured: the server answers only at a secret URL (a secret path plus a secret key). On top of that, it
 accepts calls only from the AI provider's own servers: Anthropic's by default, set by `MCP_ALLOWED_IPS` (step 11b). The
