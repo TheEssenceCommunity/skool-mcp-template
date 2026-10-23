@@ -17,5 +17,3 @@ const g = d.group ?? d;
 console.log(`Community: ${g.metadata?.display_name ?? "?"}`);
 console.log(`SKOOL_DEFAULT_SLUG = "${g.name}"`);
 console.log(`SKOOL_DEFAULT_GROUP_ID = "${g.id}"`);
-
-// Sync guard test: this line will be reverted.
