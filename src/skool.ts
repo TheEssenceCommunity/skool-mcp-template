@@ -15,6 +15,9 @@ const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 const BUILD_ID_TTL_MS = 30 * 60 * 1000;
+/** Waits before each &token= follow-up on the analytics routes; a 404 (result not ready) moves to the next wait. */
+const TOKEN_WAITS_MS = [1000, 2000, 4000];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let buildIdCache: { id: string; at: number } | null = null; // per-isolate; fine for a stateless Worker
 
 export class SkoolError extends Error {
@@ -323,11 +326,26 @@ export class SkoolClient {
    * computed — then the same call again with &token= returns it. Tokens expire within minutes ("token data not found"),
    * so the second call goes out immediately. A few rounds are allowed in case Skool hands back another token.
    * Verified live 2026-10-10 for every chart and both overview routes.
+   * Since 2026-10-23 the &token= call answers HTTP 404 while the result is still being computed (signups_by_source
+   * did so on an immediate follow-up, and returned the data a few seconds later), so each follow-up waits first and
+   * a 404 is retried after a longer wait. Every retry is a Worker subrequest: keep TOKEN_WAITS_MS short.
    */
   private async tokenized(path: string, params: Record<string, string> = {}): Promise<Json> {
     let d = await this.api2(path, { params });
     for (let i = 0; i < 3 && typeof d.token === "string" && Object.keys(d).length === 1; i++) {
-      d = await this.api2(path, { params: { ...params, token: d.token } });
+      const token = d.token;
+      for (let attempt = 0; ; attempt++) {
+        await sleep(TOKEN_WAITS_MS[attempt]);
+        try {
+          d = await this.api2(path, { params: { ...params, token } });
+          break;
+        } catch (e) {
+          if (!(e instanceof SkoolError && e.kind === "notfound")) throw e;
+          if (attempt === TOKEN_WAITS_MS.length - 1) {
+            throw new SkoolError(`Skool had no result for ${path} after ${TOKEN_WAITS_MS.reduce((a, b) => a + b, 0) / 1000}s (token follow-up kept answering 404).`, "notfound", 404);
+          }
+        }
+      }
     }
     if (typeof d.token === "string" && Object.keys(d).length === 1) throw new SkoolError(`Skool kept answering ${path} with a token and no data.`, "http");
     return d;
